@@ -1,2 +1,0 @@
-# qulabech-erp
-erp sistemi
