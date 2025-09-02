@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QULABECH-ERP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+        .container {
+            max-width: 960px;
+            margin: 40px auto;
+            padding: 24px;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .btn {
+            padding: 10px 20px;
+            background-color: #4f46e5;
+            color: #fff;
+            font-weight: 600;
+            border-radius: 8px;
+            transition: background-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #4338ca;
+        }
+        .input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        /* Takvim Stilleri */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+        }
+        .calendar-day {
+            min-height: 80px;
+            padding: 8px;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .calendar-day:hover {
+            background-color: #f3f4f6;
+        }
+        .calendar-day.current-month {
+            background-color: #ffffff;
+        }
+        .calendar-day.today {
+            background-color: #d1e5ff;
+            border-color: #2563eb;
+        }
+        .event-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-top: 4px;
+        }
+        .dot-toplanti { background-color: #ef4444; }
+        .dot-fuar { background-color: #22c55e; }
+        .dot-is-aktivitesi { background-color: #f97316; }
+        .dot-diger { background-color: #6b7280; }
+        .day-number {
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container" class="container">
+        <!-- Giriş Sayfası -->
+        <div id="login-page">
+            <div class="flex flex-col items-center">
+                <img src="https://tr.wikipedia.org/static/images/icons/wikipedia.png" alt="Türk Bayrağı" class="w-24 h-24 mb-4">
+                <h1 class="text-xl md:text-2xl font-bold text-gray-900 mb-2">QULABECH-ERP</h1>
+                <p class="text-sm md:text-base text-gray-600 mb-6 text-center">
+                    Qulabech Kurumsal Kaynak Planlama Sistemine Hoş Geldiniz.<br>
+                    Lütfen kullanıcı adı ve şifreniz ile giriş yapınız.
+                </p>
+                <div class="w-full max-w-sm">
+                    <input id="username-input" type="text" placeholder="Kullanıcı Adı / E-posta / Cep Telefonu" class="input mb-4">
+                    <input id="password-input" type="password" placeholder="Şifre" class="input mb-6">
+                    <button id="login-btn" class="btn w-full">Giriş Yap</button>
+                    <div id="login-message" class="mt-4 p-3 rounded-lg text-sm text-center hidden"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Ana Sayfa -->
+        <div id="main-page" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h1 id="welcome-message" class="text-xl md:text-2xl font-bold"></h1>
+                <button id="logout-btn" class="btn bg-red-500 hover:bg-red-600">Çıkış Yap</button>
+            </div>
+            
+            <div id="admin-dashboard" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Yönetici Paneli - Sol Sütun (Belge Yönetimi) -->
+                    <div class="space-y-6">
+                        <div class="bg-gray-100 p-6 rounded-lg shadow-inner">
+                            <div class="flex items-center justify-between mb-3">
+                                <h2 class="text-lg font-semibold">Belge Yönetimi</h2>
+                                <button id="export-docs-btn" class="btn bg-gray-600 hover:bg-gray-700 text-white text-sm py-1 px-3">Excel'e Aktar</button>
+                            </div>
+                            <input type="file" id="file-upload" class="mb-4">
+                            <button id="upload-btn" class="btn w-full mb-4">Belge Yükle</button>
+                            <h3 class="text-md font-semibold mb-2">Onay Bekleyen Belgeler</h3>
+                            <div id="pending-docs-list" class="space-y-2 mb-4"></div>
+                            <h3 class="text-md font-semibold mb-2">Tüm Yüklü Belgeler</h3>
+                            <div id="uploaded-docs-list" class="space-y-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Yönetici Paneli - Sağ Sütun (Kullanıcı Yönetimi) -->
+                    <div class="space-y-6">
+                        <div class="bg-gray-100 p-6 rounded-lg shadow-inner flex flex-col h-full">
+                            <h2 class="text-lg font-semibold mb-3">Kullanıcı Yönetimi</h2>
+                            <input type="text" id="user-name-input" placeholder="Ad Soyad" class="input mb-2">
+                            <input type="text" id="user-username-input" placeholder="Kullanıcı Adı" class="input mb-2">
+                            <input type="email" id="user-email-input" placeholder="E-posta" class="input mb-2">
+                            <input type="tel" id="user-phone-input" placeholder="Cep Telefonu" class="input mb-2">
+                            <input type="password" id="user-password-input" placeholder="Şifre" class="input mb-2">
+                            <select id="user-group-input" class="input mb-2">
+                                <option value="Üst Yönetim">Üst Yönetim</option>
+                                <option value="Yetkili">Yetkili</option>
+                                <option value="Personel">Personel</option>
+                            </select>
+                            <select id="user-role-input" class="input mb-4">
+                                <option value="manager">Yönetici</option>
+                                <option value="editor">Yetkili</option>
+                                <option value="viewer">İzleyici</option>
+                            </select>
+                            <button id="add-user-btn" class="btn w-full">Kullanıcı Ekle</button>
+                            <div id="add-user-message" class="mt-4 p-3 rounded-lg text-sm text-center hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <!-- Yönetici Paneli - Sol Sütun (Etkinlik Takvimi) -->
+                    <div class="space-y-6">
+                        <div class="bg-gray-100 p-6 rounded-lg shadow-inner flex flex-col h-full">
+                            <h2 class="text-lg font-semibold mb-3">Etkinlik Takvimi</h2>
+                            <div class="flex justify-between items-center mb-4">
+                                <button id="prev-month-btn" class="text-gray-600 hover:text-gray-800 transition-colors">&lt;</button>
+                                <h3 id="current-month-year" class="font-bold text-lg"></h3>
+                                <button id="next-month-btn" class="text-gray-600 hover:text-gray-800 transition-colors">&gt;</button>
+                            </div>
+                            <div id="calendar-header" class="grid grid-cols-7 gap-2 font-medium text-center text-sm mb-2">
+                                <span>Pzt</span><span>Sal</span><span>Çar</span><span>Per</span><span>Cum</span><span>Cmt</span><span>Paz</span>
+                            </div>
+                            <div id="calendar-grid" class="calendar-grid"></div>
+                            <h4 class="font-semibold text-lg mt-6 mb-2">Etkinlik Ekle</h4>
+                            <input type="text" id="event-name-input" placeholder="Etkinlik Adı" class="input mb-2">
+                            <select id="event-type-input" class="input mb-2">
+                                <option value="toplanti">Toplantı</option>
+                                <option value="fuar">Fuar</option>
+                                <option value="is-aktivitesi">İş Aktivitesi</option>
+                                <option value="diger">Diğer</option>
+                            </select>
+                            <input type="date" id="event-date-input" class="input mb-2">
+                            <input type="time" id="event-time-input" class="input mb-4">
+                            <button id="add-event-btn" class="btn w-full">Etkinlik Ekle</button>
+                            <div id="event-details-container" class="mt-6">
+                                <h4 id="event-details-title" class="font-bold text-lg hidden"></h4>
+                                <div id="event-details-list" class="space-y-2"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Yönetici Paneli - Sağ Sütun (Kullanıcı Listesi) -->
+                    <div class="space-y-6">
+                        <div class="bg-gray-100 p-6 rounded-lg shadow-inner flex flex-col h-full">
+                            <div class="flex items-center justify-between mb-3">
+                                <h2 class="text-lg font-semibold">Kullanıcı Listesi</h2>
+                                <button id="export-users-btn" class="btn bg-gray-600 hover:bg-gray-700 text-white text-sm py-1 px-3">Excel'e Aktar</button>
+                            </div>
+                            <div id="user-list-container" class="space-y-2 overflow-y-auto flex-grow"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="user-dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+                <!-- Kullanıcı Paneli Bölümleri -->
+                <div class="bg-gray-100 p-6 rounded-lg shadow-inner">
+                     <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-lg font-semibold">Yüklü Belgeler</h2>
+                        <button id="export-user-docs-btn" class="btn bg-gray-600 hover:bg-gray-700 text-white text-sm py-1 px-3">Excel'e Aktar</button>
+                    </div>
+                    <div id="user-uploaded-docs-list" class="space-y-2"></div>
+                </div>
+
+                <div class="bg-gray-100 p-6 rounded-lg shadow-inner">
+                    <h2 class="text-lg font-semibold mb-3">Onay Bekleyen Belgeler</h2>
+                    <div id="user-pending-docs-list" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- Ortak Sohbet Alanı -->
+            <div id="chat-section" class="mt-6 bg-gray-100 p-6 rounded-lg shadow-inner">
+                <h2 class="text-lg font-semibold mb-3">Ortak Sohbet Alanı</h2>
+                <div id="chat-history" class="h-64 overflow-y-auto border rounded-lg p-4 mb-4 bg-white"></div>
+                <div class="flex items-center space-x-2">
+                    <input type="text" id="chat-message-input" placeholder="Mesajınızı buraya yazın..." class="input">
+                    <button id="send-message-btn" class="btn flex-shrink-0">Gönder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDocs, collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, getDoc, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase ve Global Değişkenler
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Firebase başlangıç
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // UI Elemanları
+        const loginPage = document.getElementById('login-page');
+        const mainPage = document.getElementById('main-page');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const usernameInput = document.getElementById('username-input');
+        const passwordInput = document.getElementById('password-input');
+        const loginMessage = document.getElementById('login-message');
+        const adminDashboard = document.getElementById('admin-dashboard');
+        const userDashboard = document.getElementById('user-dashboard');
+        const welcomeMessage = document.getElementById('welcome-message');
+        const uploadedDocsList = document.getElementById('uploaded-docs-list');
+        const pendingDocsList = document.getElementById('pending-docs-list');
+        const userUploadedDocsList = document.getElementById('user-uploaded-docs-list');
+        const userPendingDocsList = document.getElementById('user-pending-docs-list');
+        const fileUpload = document.getElementById('file-upload');
+        const uploadBtn = document.getElementById('upload-btn');
+        const chatHistory = document.getElementById('chat-history');
+        const chatMessageInput = document.getElementById('chat-message-input');
+        const sendMessageBtn = document.getElementById('send-message-btn');
+        const addUserBtn = document.getElementById('add-user-btn');
+        const userNameInput = document.getElementById('user-name-input');
+        const userUsernameInput = document.getElementById('user-username-input');
+        const userEmailInput = document.getElementById('user-email-input');
+        const userPhoneInput = document.getElementById('user-phone-input');
+        const userPasswordInput = document.getElementById('user-password-input');
+        const userGroupInput = document.getElementById('user-group-input');
+        const userRoleInput = document.getElementById('user-role-input');
+        const userListContainer = document.getElementById('user-list-container');
+        const addUserMessage = document.getElementById('add-user-message');
+        const exportDocsBtn = document.getElementById('export-docs-btn');
+        const exportUsersBtn = document.getElementById('export-users-btn');
+        const exportUserDocsBtn = document.getElementById('export-user-docs-btn');
+        
+        // Takvim elemanları
+        const currentMonthYearEl = document.getElementById('current-month-year');
+        const calendarGridEl = document.getElementById('calendar-grid');
+        const prevMonthBtn = document.getElementById('prev-month-btn');
+        const nextMonthBtn = document.getElementById('next-month-btn');
+        const eventNameInput = document.getElementById('event-name-input');
+        const eventTypeInput = document.getElementById('event-type-input');
+        const eventDateInput = document.getElementById('event-date-input');
+        const eventTimeInput = document.getElementById('event-time-input');
+        const addEventBtn = document.getElementById('add-event-btn');
+        const eventDetailsContainer = document.getElementById('event-details-container');
+        const eventDetailsTitle = document.getElementById('event-details-title');
+        const eventDetailsList = document.getElementById('event-details-list');
+
+        let currentUser = null;
+        let isManager = false;
+        let isStartupComplete = false;
+        let editingUserId = null;
+        
+        let currentMonth = new Date().getMonth();
+        let currentYear = new Date().getFullYear();
+        let allEvents = [];
+        let allDocuments = []; // Excel'e aktarım için tüm belgeler
+        let allUsers = []; // Excel'e aktarım için tüm kullanıcılar
+
+        // Otomatik kullanıcı adı oluşturma işlevi
+        userNameInput.addEventListener('input', () => {
+            const name = userNameInput.value;
+            const username = name.trim().toLowerCase().replace(/\s+/g, '-');
+            userUsernameInput.value = username;
+        });
+
+        // Mesaj kutusu işlevi
+        const showMessage = (el, message, type = 'info') => {
+            el.textContent = message;
+            el.className = `mt-4 p-3 rounded-lg text-sm text-center ${
+                type === 'success' ? 'bg-green-100 text-green-700' :
+                type === 'error' ? 'bg-red-100 text-red-700' :
+                'bg-blue-100 text-blue-700'
+            }`;
+            el.classList.remove('hidden');
+        };
+
+        // Oturum açma işlevi
+        const handleLogin = async () => {
+            const loginIdentifier = usernameInput.value;
+            const password = passwordInput.value;
+            
+            if (!loginIdentifier || !password) {
+                showMessage(loginMessage, 'Lütfen tüm alanları doldurun.', 'error');
+                return;
+            }
+
+            try {
+                // Kullanıcı kimlik doğrulamasını e-posta, kullanıcı adı veya telefon numarası ile kontrol et
+                const usersRef = collection(db, `artifacts/${appId}/public/data/users`);
+                const q = query(usersRef, where('username', '==', loginIdentifier));
+                const qEmail = query(usersRef, where('email', '==', loginIdentifier));
+                const qPhone = query(usersRef, where('phone', '==', loginIdentifier));
+
+                let userDoc = null;
+                const [usernameSnapshot, emailSnapshot, phoneSnapshot] = await Promise.all([
+                    getDocs(q), getDocs(qEmail), getDocs(qPhone)
+                ]);
+
+                if (!usernameSnapshot.empty) {
+                    userDoc = usernameSnapshot.docs[0];
+                } else if (!emailSnapshot.empty) {
+                    userDoc = emailSnapshot.docs[0];
+                } else if (!phoneSnapshot.empty) {
+                    userDoc = phoneSnapshot.docs[0];
+                }
+
+                if (!userDoc || userDoc.data().password !== password) {
+                    showMessage(loginMessage, 'Kullanıcı adı veya şifre hatalı.', 'error');
+                    return;
+                }
+
+                currentUser = {
+                    uid: userDoc.id,
+                    email: userDoc.data().email,
+                    displayName: userDoc.data().name,
+                };
+                isManager = userDoc.data().role === 'manager';
+
+                updateUI(currentUser);
+                showMessage(loginMessage, 'Giriş başarılı!', 'success');
+            } catch (error) {
+                showMessage(loginMessage, `Giriş hatası: ${error.message}`, 'error');
+                console.error("Login error:", error);
+            }
+        };
+
+        // Oturum kapatma işlevi
+        const handleLogout = async () => {
+            currentUser = null;
+            isManager = false;
+            updateUI(null);
+            await signOut(auth); // Opsiyonel, sadece oturum açma yöntemini sıfırlamak için
+        };
+        
+        // Belge yükleme işlevi
+        const handleUpload = async () => {
+            if (!currentUser) {
+                showMessage(uploadedDocsList, 'Belge yüklemek için lütfen giriş yapın.', 'error');
+                return;
+            }
+            const file = fileUpload.files[0];
+            if (!file) {
+                showMessage(uploadedDocsList, 'Lütfen bir dosya seçin.', 'error');
+                return;
+            }
+
+            const docRef = await addDoc(collection(db, `artifacts/${appId}/public/data/documents`), {
+                name: file.name,
+                status: 'pending',
+                driveLink: 'http://drive.google.com/fake-link', // Simülasyon
+                uploadedBy: currentUser.email,
+                uploadedAt: serverTimestamp(),
+            });
+            showMessage(uploadedDocsList, 'Belge başarıyla yüklendi ve onaya gönderildi.', 'success');
+        };
+
+        // Kullanıcı ekleme/düzenleme işlevi
+        const handleAddOrUpdateUser = async () => {
+            const user = {
+                name: userNameInput.value,
+                username: userUsernameInput.value,
+                email: userEmailInput.value,
+                phone: userPhoneInput.value,
+                password: userPasswordInput.value,
+                role: userRoleInput.value,
+                group: userGroupInput.value,
+                createdAt: serverTimestamp()
+            };
+
+            if (!user.name || !user.username || !user.email || !user.password) {
+                showMessage(addUserMessage, 'Tüm alanları doldurun.', 'error');
+                return;
+            }
+
+            try {
+                if (editingUserId) {
+                    // Kullanıcıyı güncelle
+                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, editingUserId);
+                    await setDoc(userRef, user, { merge: true });
+                    showMessage(addUserMessage, 'Kullanıcı başarıyla güncellendi!', 'success');
+                } else {
+                    // Yeni kullanıcı ekle
+                    const existingUsersRef = collection(db, `artifacts/${appId}/public/data/users`);
+                    const q = query(existingUsersRef, where('email', '==', user.email));
+                    const snapshot = await getDocs(q);
+                    if (!snapshot.empty) {
+                        showMessage(addUserMessage, 'Bu e-posta adresi zaten kullanılıyor.', 'error');
+                        return;
+                    }
+                    
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/users`), user);
+                    showMessage(addUserMessage, 'Kullanıcı başarıyla eklendi!', 'success');
+                }
+                // Formu ve durumu sıfırla
+                editingUserId = null;
+                userNameInput.value = '';
+                userUsernameInput.value = '';
+                userEmailInput.value = '';
+                userPhoneInput.value = '';
+                userPasswordInput.value = '';
+                userGroupInput.value = 'Personel';
+                userRoleInput.value = 'viewer';
+                addUserBtn.textContent = 'Kullanıcı Ekle';
+
+            } catch (error) {
+                showMessage(addUserMessage, `Kullanıcı işlemi hatası: ${error.message}`, 'error');
+            }
+        };
+
+        // Sohbet mesajı gönderme işlevi
+        const handleSendMessage = async () => {
+            if (!currentUser) {
+                console.error('Mesaj göndermek için kullanıcı oturum açmış olmalı.');
+                return;
+            }
+
+            const messageText = chatMessageInput.value.trim();
+            if (!messageText) return;
+
+            const message = {
+                text: messageText,
+                sender: currentUser.displayName || currentUser.email,
+                timestamp: serverTimestamp(),
+            };
+
+            await addDoc(collection(db, `artifacts/${appId}/public/data/chat`), message);
+            chatMessageInput.value = '';
+        };
+
+        // Onaylama işlevi
+        const handleApprove = async (docId) => {
+            const docRef = doc(db, `artifacts/${appId}/public/data/documents`, docId);
+            await setDoc(docRef, { status: 'approved', approvedBy: currentUser.email, approvedAt: serverTimestamp() }, { merge: true });
+        };
+        
+        // Kullanıcı silme işlevi
+        const handleDeleteUser = async (userId) => {
+            // Gerçek bir uygulamada, bir onay iletişim kutusu göstermeniz gerekir.
+            console.log(`Kullanıcı siliniyor: ${userId}`);
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+            await deleteDoc(userRef);
+        };
+
+        // Kullanıcı düzenleme işlevi
+        const handleEditUser = (userData) => {
+            editingUserId = userData.id;
+            userNameInput.value = userData.name;
+            userUsernameInput.value = userData.username;
+            userEmailInput.value = userData.email;
+            userPhoneInput.value = userData.phone;
+            userPasswordInput.value = userData.password;
+            userGroupInput.value = userData.group || 'Personel'; // Gruplandırma için varsayılan değer
+            userRoleInput.value = userData.role;
+            addUserBtn.textContent = 'Kaydet';
+            window.scrollTo({
+                top: document.getElementById('admin-dashboard').offsetTop,
+                behavior: 'smooth'
+            });
+        };
+        
+        // Arayüzü güncelleme
+        const updateUI = (user) => {
+            if (user) {
+                loginPage.classList.add('hidden');
+                mainPage.classList.remove('hidden');
+                welcomeMessage.textContent = `Hoş geldiniz, ${user.displayName || user.email}!`;
+                
+                if (isManager) {
+                    adminDashboard.classList.remove('hidden');
+                    userDashboard.classList.add('hidden');
+                    // Yönetici paneli için özel dinleyiciler
+                    listenForDocuments();
+                    listenForUsers();
+                    listenForEvents();
+                    renderCalendar();
+                } else {
+                    adminDashboard.classList.add('hidden');
+                    userDashboard.classList.remove('hidden');
+                    // Kullanıcı paneli için özel dinleyiciler
+                    listenForDocuments();
+                }
+
+                // Tüm kullanıcılar için ortak dinleyiciler
+                listenForChat();
+                
+            } else {
+                loginPage.classList.remove('hidden');
+                mainPage.classList.add('hidden');
+                usernameInput.value = '';
+                passwordInput.value = '';
+                showMessage(loginMessage, '');
+            }
+        };
+
+        // Belgeleri dinleme işlevi
+        const listenForDocuments = () => {
+            const docsRef = collection(db, `artifacts/${appId}/public/data/documents`);
+            onSnapshot(docsRef, (snapshot) => {
+                allDocuments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                // Yönetici Paneli
+                if (isManager) {
+                    renderDocuments(allDocuments, uploadedDocsList, true);
+                    renderDocuments(allDocuments.filter(d => d.status === 'pending'), pendingDocsList);
+                }
+                
+                // Kullanıcı Paneli
+                renderDocuments(allDocuments, userUploadedDocsList, false);
+                renderDocuments(allDocuments.filter(d => d.status === 'pending'), userPendingDocsList);
+            });
+        };
+        
+        // Kullanıcıları dinleme işlevi
+        const listenForUsers = () => {
+            const usersRef = collection(db, `artifacts/${appId}/public/data/users`);
+            onSnapshot(usersRef, (snapshot) => {
+                allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderUsers(allUsers, userListContainer);
+            });
+        };
+
+        // Belgeleri render etme
+        const renderDocuments = (docs, el, isManagerView) => {
+            el.innerHTML = '';
+            if (docs.length === 0) {
+                el.innerHTML = '<p class="text-gray-500">Gösterilecek belge yok.</p>';
+                return;
+            }
+
+            docs.sort((a, b) => (b.uploadedAt?.toDate() || 0) - (a.uploadedAt?.toDate() || 0));
+
+            docs.forEach(docData => {
+                const docDiv = document.createElement('div');
+                docDiv.className = 'p-3 bg-white rounded-lg border flex justify-between items-center';
+                const statusColor = docData.status === 'approved' ? 'text-green-600' : 'text-yellow-600';
+                docDiv.innerHTML = `
+                    <div class="flex-grow">
+                        <p class="font-medium">${docData.name}</p>
+                        <p class="text-sm ${statusColor}">${docData.status === 'approved' ? 'Onaylandı' : 'Onay Bekliyor'}</p>
+                        <p class="text-xs text-gray-500">Yükleyen: ${docData.uploadedBy}</p>
+                    </div>
+                `;
+                
+                if (isManagerView && docData.status === 'pending') {
+                    const approveBtn = document.createElement('button');
+                    approveBtn.className = 'btn btn-sm';
+                    approveBtn.textContent = 'Onayla';
+                    approveBtn.addEventListener('click', () => handleApprove(docData.id));
+                    docDiv.appendChild(approveBtn);
+                }
+                el.appendChild(docDiv);
+            });
+        };
+        
+        // Kullanıcıları render etme
+        const renderUsers = (users, el) => {
+            el.innerHTML = '';
+            if (users.length === 0) {
+                el.innerHTML = '<p class="text-gray-500">Kullanıcı bulunamadı.</p>';
+                return;
+            }
+            users.forEach(userData => {
+                const userDiv = document.createElement('div');
+                userDiv.className = 'p-3 bg-white rounded-lg border flex justify-between items-center';
+                
+                let roleText = '';
+                switch(userData.role) {
+                    case 'manager':
+                        roleText = 'Yönetici';
+                        break;
+                    case 'editor':
+                        roleText = 'Yetkili';
+                        break;
+                    case 'viewer':
+                        roleText = 'İzleyici';
+                        break;
+                    default:
+                        roleText = userData.role;
+                }
+
+                userDiv.innerHTML = `
+                    <div class="flex-grow">
+                        <p class="font-medium">${userData.name}</p>
+                        <p class="text-sm text-gray-600">Kullanıcı Adı: ${userData.username}</p>
+                        <p class="text-xs text-gray-500">E-posta: ${userData.email}</p>
+                        <p class="text-xs text-gray-500">Rol: ${roleText}</p>
+                        <p class="text-xs text-gray-500">Grup: ${userData.group}</p>
+                    </div>
+                    <div class="flex items-center space-x-2"></div>
+                `;
+
+                const buttonsDiv = userDiv.querySelector('.flex.items-center');
+
+                if (userData.username !== 'admin') { // Admin kullanıcısının silinmesini engelle
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'btn bg-gray-500 hover:bg-gray-600 text-white text-sm';
+                    editBtn.textContent = 'Düzenle';
+                    editBtn.addEventListener('click', () => handleEditUser(userData));
+                    buttonsDiv.appendChild(editBtn);
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'btn bg-red-500 hover:bg-red-600 text-white text-sm';
+                    deleteBtn.textContent = 'Sil';
+                    deleteBtn.addEventListener('click', () => handleDeleteUser(userData.id));
+                    buttonsDiv.appendChild(deleteBtn);
+                }
+                
+                el.appendChild(userDiv);
+            });
+        };
+
+        // Sohbeti dinleme işlevi
+        const listenForChat = () => {
+            const chatRef = collection(db, `artifacts/${appId}/public/data/chat`);
+            const q = query(chatRef);
+            onSnapshot(q, (snapshot) => {
+                const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                messages.sort((a, b) => (a.timestamp?.toDate() || 0) - (b.timestamp?.toDate() || 0));
+                chatHistory.innerHTML = '';
+                messages.forEach(msg => {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'bg-white p-3 rounded-lg shadow mb-2';
+                    msgDiv.innerHTML = `
+                        <p class="font-semibold text-sm mb-1">${msg.sender}</p>
+                        <p class="text-gray-700">${msg.text}</p>
+                        <p class="text-xs text-gray-400 mt-1">${msg.timestamp?.toDate().toLocaleString()}</p>
+                    `;
+                    chatHistory.appendChild(msgDiv);
+                });
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            });
+        };
+
+        // Takvimi render etme işlevi
+        const renderCalendar = () => {
+            calendarGridEl.innerHTML = '';
+            eventDetailsContainer.classList.add('hidden');
+            const date = new Date(currentYear, currentMonth, 1);
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            const firstDayOfWeek = date.getDay(); // Pazar 0, Pazartesi 1...
+
+            // Başlığı güncelle
+            const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+            currentMonthYearEl.textContent = `${monthNames[currentMonth]} ${currentYear}`;
+
+            // Boş günleri ekle
+            const startDay = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Pazar yerine Pazartesi'den başlaması için
+            for (let i = 0; i < startDay; i++) {
+                const emptyDay = document.createElement('div');
+                emptyDay.className = 'calendar-day';
+                calendarGridEl.appendChild(emptyDay);
+            }
+
+            // Günleri ekle
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dayEl = document.createElement('div');
+                dayEl.className = 'calendar-day current-month';
+                dayEl.dataset.date = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                
+                const dayNumber = document.createElement('div');
+                dayNumber.className = 'day-number';
+                dayNumber.textContent = i;
+                dayEl.appendChild(dayNumber);
+
+                const today = new Date();
+                if (i === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear()) {
+                    dayEl.classList.add('today');
+                }
+
+                // Etkinlik noktalarını ekle
+                const dayEvents = allEvents.filter(event => {
+                    const eventDate = event.date.toDate();
+                    return eventDate.getFullYear() === currentYear && eventDate.getMonth() === currentMonth && eventDate.getDate() === i;
+                });
+
+                if (dayEvents.length > 0) {
+                    const dotContainer = document.createElement('div');
+                    dotContainer.className = 'flex flex-wrap justify-center';
+                    const uniqueTypes = [...new Set(dayEvents.map(e => e.type))];
+                    uniqueTypes.forEach(type => {
+                        const dot = document.createElement('div');
+                        dot.className = `event-dot dot-${type}`;
+                        dotContainer.appendChild(dot);
+                    });
+                    dayEl.appendChild(dotContainer);
+                }
+
+                dayEl.addEventListener('click', () => {
+                    showEventDetails(dayEl.dataset.date, dayEvents);
+                });
+
+                calendarGridEl.appendChild(dayEl);
+            }
+        };
+
+        const showEventDetails = (dateStr, events) => {
+            eventDetailsTitle.textContent = `${dateStr} Tarihli Etkinlikler`;
+            eventDetailsTitle.classList.remove('hidden');
+            eventDetailsList.innerHTML = '';
+            
+            if (events.length === 0) {
+                eventDetailsList.innerHTML = '<p class="text-gray-500">Bu güne ait etkinlik bulunamadı.</p>';
+            } else {
+                events.forEach(event => {
+                    const eventDiv = document.createElement('div');
+                    eventDiv.className = 'p-3 bg-white rounded-lg shadow-sm border';
+                    const eventTime = event.date.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    eventDiv.innerHTML = `
+                        <p class="font-semibold">${event.name}</p>
+                        <p class="text-sm text-gray-600">Tür: ${event.type}</p>
+                        <p class="text-xs text-gray-500">Saat: ${eventTime}</p>
+                    `;
+                    eventDetailsList.appendChild(eventDiv);
+                });
+            }
+            eventDetailsContainer.classList.remove('hidden');
+        };
+
+        // Etkinlikleri dinleme işlevi
+        const listenForEvents = () => {
+            const eventsRef = collection(db, `artifacts/${appId}/public/data/events`);
+            onSnapshot(eventsRef, (snapshot) => {
+                allEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderCalendar();
+            });
+        };
+
+        // Etkinlik ekleme işlevi
+        const handleAddEvent = async () => {
+            const name = eventNameInput.value.trim();
+            const type = eventTypeInput.value;
+            const dateStr = eventDateInput.value;
+            const timeStr = eventTimeInput.value;
+
+            if (!name || !dateStr) {
+                // Özel mesaj kutusu kullanın, alert'i engelle.
+                console.error('Lütfen etkinlik adını ve tarihini girin.');
+                return;
+            }
+
+            const eventDate = new Date(`${dateStr}T${timeStr}:00`);
+            
+            const eventData = {
+                name: name,
+                type: type,
+                date: Timestamp.fromDate(eventDate),
+                createdBy: currentUser.displayName || 'Anonim',
+            };
+
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/public/data/events`), eventData);
+                eventNameInput.value = '';
+                eventDateInput.value = '';
+                eventTimeInput.value = '';
+                // Özel mesaj kutusu kullanın, alert'i engelle.
+                console.log('Etkinlik başarıyla eklendi!');
+            } catch (e) {
+                console.error("Etkinlik ekleme hatası:", e);
+                // Özel mesaj kutusu kullanın, alert'i engelle.
+                console.error('Etkinlik eklenirken bir hata oluştu.');
+            }
+        };
+
+        // Yönetici hesabını oluşturma ve ana uygulamayı başlatma
+        const handleAdminCreationAndStartup = async () => {
+            const adminEmail = 'muhammetcankardash@gmail.com';
+            const adminPassword = '123456';
+            const usersRef = collection(db, `artifacts/${appId}/public/data/users`);
+            console.log('Yönetici hesabı oluşturma ve başlatma işlemi başladı...');
+
+            try {
+                // Yönetici hesabının varlığını kontrol et
+                const q = query(usersRef, where('email', '==', adminEmail));
+                const snapshot = await getDocs(q);
+
+                if (snapshot.empty) {
+                    // Yönetici hesabı yoksa oluştur
+                    await setDoc(doc(usersRef, 'admin'), {
+                        name: 'Muhammet Can Kardas',
+                        username: 'admin',
+                        email: adminEmail,
+                        phone: '5551234567',
+                        password: adminPassword,
+                        role: 'manager',
+                        group: 'Üst Yönetim',
+                        createdAt: serverTimestamp()
+                    });
+                    console.log('Yönetici hesabı oluşturuldu.');
+                }
+            } catch (error) {
+                console.error('Yönetici hesabı oluşturma hatası:', error);
+            }
+        };
+
+        // Verileri CSV'ye dönüştürme ve indirme işlevi
+        const exportToCsv = (data, filename) => {
+            if (!data || data.length === 0) {
+                console.warn('Aktarılacak veri bulunamadı.');
+                return;
+            }
+
+            const headers = Object.keys(data[0]);
+            const csvRows = [
+                headers.join(';'), // Excel uyumluluğu için noktalı virgül kullanın
+                ...data.map(row => headers.map(header => {
+                    const value = row[header];
+                    // Nesneleri ve dizileri dönüştür
+                    if (typeof value === 'object' && value !== null) {
+                        if (value.toDate) { // Firebase Timestamp
+                            return `"${value.toDate().toLocaleString()}"`;
+                        }
+                        return `"${JSON.stringify(value).replace(/"/g, '""')}"`; // Çift tırnakları kaçış karakteriyle yaz
+                    }
+                    return `"${String(value).replace(/"/g, '""')}"`;
+                }).join(';'))
+            ];
+
+            const csvString = csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        };
+
+        // Olay dinleyicileri
+        loginBtn.addEventListener('click', handleLogin);
+        logoutBtn.addEventListener('click', handleLogout);
+        uploadBtn.addEventListener('click', handleUpload);
+        addUserBtn.addEventListener('click', handleAddOrUpdateUser);
+        sendMessageBtn.addEventListener('click', handleSendMessage);
+        addEventBtn.addEventListener('click', handleAddEvent);
+        prevMonthBtn.addEventListener('click', () => {
+            currentMonth--;
+            if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            }
+            renderCalendar();
+        });
+        nextMonthBtn.addEventListener('click', () => {
+            currentMonth++;
+            if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
+            renderCalendar();
+        });
+
+        // Yeni Excel'e aktar butonları için olay dinleyicileri
+        exportDocsBtn.addEventListener('click', () => {
+            exportToCsv(allDocuments, 'YukluBelgeler.csv');
+        });
+        exportUsersBtn.addEventListener('click', () => {
+            exportToCsv(allUsers, 'KullaniciListesi.csv');
+        });
+        exportUserDocsBtn.addEventListener('click', () => {
+            exportToCsv(allDocuments, 'KullaniciBelgeleri.csv');
+        });
+        
+        // Uygulamanın başlangıç durumu
+        const init = async () => {
+             // Özel bir token varsa, onunla oturum açmayı dene, yoksa anonim olarak devam et.
+            if (initialAuthToken) {
+                try {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } catch (error) {
+                    console.error("Özel token ile oturum açma hatası:", error);
+                    await signInAnonymously(auth);
+                }
+            } else {
+                await signInAnonymously(auth);
+            }
+
+            // Anonim kullanıcıyla oturum açıldıktan sonra yönetici hesabını oluşturma işlemini bekle
+            if (!isStartupComplete) {
+                await handleAdminCreationAndStartup();
+                isStartupComplete = true;
+            }
+
+            // UI'ı başlangıç durumuna ayarla
+            updateUI(null);
+        };
+
+        // Uygulamayı başlat
+        init();
+        
+    </script>
+</body>
+</html>
